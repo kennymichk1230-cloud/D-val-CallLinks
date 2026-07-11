@@ -15,22 +15,32 @@ jobs:
       - name: Checkout source code
         uses: actions/checkout@v4
 
+      - name: Verify Gradle Wrapper
+        run: |
+          echo "Project root:"
+          ls -la
+
+          echo ""
+          echo "Gradle wrapper directory:"
+          ls -la gradle/wrapper
+
+          echo ""
+          echo "Checking gradle-wrapper.jar..."
+          file gradle/wrapper/gradle-wrapper.jar
+
+          echo ""
+          echo "SHA256 checksum:"
+          sha256sum gradle/wrapper/gradle-wrapper.jar
+
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
           distribution: zulu
-          java-version: '17'
+          java-version: "17"
           cache: gradle
 
       - name: Grant execute permission for Gradle
-        run: |
-          if [ -f gradlew ]; then
-            chmod +x gradlew
-          else
-            echo "gradlew not found."
-            ls -la
-            exit 1
-          fi
+        run: chmod +x gradlew
 
       - name: Create environment configuration
         run: |
