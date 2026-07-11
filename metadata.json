@@ -1,0 +1,6 @@
+{
+  "name": "D'val CallLink",
+  "description": "Production-ready Audio & Video Calling app supporting 1-on-1 and group voice/video calls.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
