@@ -36,6 +36,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.draw.shadow
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
@@ -397,6 +400,63 @@ fun LoginScreen(
                     )
                 }
 
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    HorizontalDivider(modifier = Modifier.weight(1f), color = GlassWhite.copy(alpha = 0.2f))
+                    Text(
+                        text = " OR ",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextSecondary,
+                        modifier = Modifier.padding(horizontal = 8.dp)
+                    )
+                    HorizontalDivider(modifier = Modifier.weight(1f), color = GlassWhite.copy(alpha = 0.2f))
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Button(
+                    onClick = {
+                        isLoading = true
+                        viewModel.signInWithGoogle("mock-google-id-token") { success, err ->
+                            isLoading = false
+                            if (success) {
+                                onLoginSuccess()
+                            } else {
+                                errorMessage = err ?: "Google Sign-In Failed"
+                            }
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color.White),
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(50.dp)
+                        .testTag("google_login_button")
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        Text(
+                            text = "G",
+                            color = DeepCharcoal,
+                            fontWeight = FontWeight.Black,
+                            fontSize = 16.sp
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Text(
+                            text = "CONTINUE WITH GOOGLE",
+                            color = Color.Black,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 13.sp
+                        )
+                    }
+                }
+
                 Spacer(modifier = Modifier.height(16.dp))
 
                 TextButton(
@@ -426,9 +486,382 @@ fun LoginScreen(
 }
 
 // 3. DASHBOARD MAIN SCREEN
+private fun formatDuration(seconds: Long): String {
+    val m = seconds / 60
+    val s = seconds % 60
+    return String.format("%02d:%02d", m, s)
+}
+
+private fun formatTimestamp(timestamp: Long): String {
+    return try {
+        val sdf = java.text.SimpleDateFormat("MMM dd, hh:mm a", java.util.Locale.getDefault())
+        sdf.format(java.util.Date(timestamp))
+    } catch (e: Exception) {
+        "Unknown"
+    }
+}
+
+@Composable
+fun MainDashboardUnifiedScreen(
+    viewModel: CallLinkViewModel,
+    onNavigateToDialer: () -> Unit
+) {
+    val activeSessions by viewModel.activeSessions.collectAsState()
+    val allCallRecords by viewModel.allCallRecords.collectAsState()
+    val contacts by viewModel.allContacts.collectAsState()
+    val syncStatus by viewModel.syncStatus.collectAsState()
+
+    val onlineContacts = contacts.filter { it.status == "Online" }
+
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(20.dp)
+    ) {
+        // Hero Section & Status Badge
+        item {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column {
+                    Text(
+                        text = "CallLink Console",
+                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                        color = Color.White
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = syncStatus,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = ElectricTeal
+                    )
+                }
+
+                IconButton(
+                    onClick = { onNavigateToDialer() },
+                    modifier = Modifier
+                        .background(CyberCyan, CircleShape)
+                        .size(40.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Add,
+                        contentDescription = "New Call",
+                        tint = Color.Black
+                    )
+                }
+            }
+        }
+
+        // Section 1: Active Call Sessions
+        item {
+            Card(
+                colors = CardDefaults.cardColors(containerColor = SlateCard),
+                shape = RoundedCornerShape(16.dp),
+                border = BorderStroke(1.dp, GlassWhite.copy(alpha = 0.08f)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.CastConnected,
+                                contentDescription = null,
+                                tint = CyberCyan,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Active Call Sessions",
+                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                                color = Color.White
+                            )
+                        }
+                        
+                        if (activeSessions.isNotEmpty()) {
+                            Box(
+                                modifier = Modifier
+                                    .background(SignalCoral.copy(alpha = 0.15f), RoundedCornerShape(12.dp))
+                                    .padding(horizontal = 8.dp, vertical = 4.dp)
+                            ) {
+                                Text(
+                                    text = "${activeSessions.size} LIVE",
+                                    color = SignalCoral,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    if (activeSessions.isEmpty()) {
+                        Text(
+                            text = "No active video or audio call streams currently. Start a call from the Dialer to open a room.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = TextSecondary
+                        )
+                    } else {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            activeSessions.forEach { active ->
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .background(DeepCharcoal, RoundedCornerShape(12.dp))
+                                        .border(0.5.dp, GlassWhite.copy(alpha = 0.05f), RoundedCornerShape(12.dp))
+                                        .padding(12.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = "Room ID: ${active.roomId}",
+                                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                                            color = Color.White
+                                        )
+                                        Spacer(modifier = Modifier.height(2.dp))
+                                        Text(
+                                            text = "Caller: ${active.callerName} (${active.callerPhone})",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = TextSecondary
+                                        )
+                                        if (active.calleeName.isNotEmpty()) {
+                                            Text(
+                                                text = "Callee: ${active.calleeName}",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = TextSecondary
+                                            )
+                                        }
+                                    }
+
+                                    Button(
+                                        onClick = { viewModel.joinRoomById(active.roomId) },
+                                        colors = ButtonDefaults.buttonColors(containerColor = CyberCyan),
+                                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                                        shape = RoundedCornerShape(8.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = if (active.isVoiceOnly) Icons.Default.Call else Icons.Default.Videocam,
+                                            contentDescription = "Join",
+                                            tint = Color.Black,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text("Join", color = Color.Black, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Section 2: Online / Available Contacts
+        item {
+            Card(
+                colors = CardDefaults.cardColors(containerColor = SlateCard),
+                shape = RoundedCornerShape(16.dp),
+                border = BorderStroke(1.dp, GlassWhite.copy(alpha = 0.08f)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.People,
+                            contentDescription = null,
+                            tint = ElectricTeal,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Available Contacts",
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                            color = Color.White
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    if (onlineContacts.isEmpty()) {
+                        Text(
+                            text = "All contacts are currently offline. Statuses update in real-time when users log in.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = TextSecondary
+                        )
+                    } else {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            onlineContacts.forEach { contact ->
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .background(DeepCharcoal, RoundedCornerShape(12.dp))
+                                        .border(0.5.dp, GlassWhite.copy(alpha = 0.05f), RoundedCornerShape(12.dp))
+                                        .padding(12.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(10.dp)
+                                                .background(ElectricTeal, CircleShape)
+                                        )
+                                        Spacer(modifier = Modifier.width(10.dp))
+                                        Column {
+                                            Text(
+                                                text = contact.name,
+                                                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                                                color = Color.White
+                                            )
+                                            Text(
+                                                text = contact.phone,
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = TextSecondary
+                                            )
+                                        }
+                                    }
+
+                                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                        IconButton(
+                                            onClick = { viewModel.startCall(contact, isVoiceOnly = true) },
+                                            modifier = Modifier
+                                                .background(GlassWhite.copy(alpha = 0.08f), CircleShape)
+                                                .size(36.dp)
+                                        ) {
+                                            Icon(Icons.Default.Call, contentDescription = "Voice Call", tint = Color.White, modifier = Modifier.size(16.dp))
+                                        }
+                                        IconButton(
+                                            onClick = { viewModel.startCall(contact, isVoiceOnly = false) },
+                                            modifier = Modifier
+                                                .background(CyberCyan.copy(alpha = 0.15f), CircleShape)
+                                                .size(36.dp)
+                                        ) {
+                                            Icon(Icons.Default.Videocam, contentDescription = "Video Call", tint = CyberCyan, modifier = Modifier.size(16.dp))
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Section 3: Recent Call History
+        item {
+            val recentCalls = allCallRecords.take(5)
+            Card(
+                colors = CardDefaults.cardColors(containerColor = SlateCard),
+                shape = RoundedCornerShape(16.dp),
+                border = BorderStroke(1.dp, GlassWhite.copy(alpha = 0.08f)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.History,
+                            contentDescription = null,
+                            tint = CyberCyan,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Recent Logs",
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                            color = Color.White
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    if (recentCalls.isEmpty()) {
+                        Text(
+                            text = "No recent call activity found. Place or receive a call to display logs.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = TextSecondary
+                        )
+                    } else {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            recentCalls.forEach { record ->
+                                val isMissed = record.callType.equals("missed", ignoreCase = true)
+                                val isOutgoing = record.callType.equals("outgoing", ignoreCase = true)
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .background(DeepCharcoal, RoundedCornerShape(12.dp))
+                                        .border(0.5.dp, GlassWhite.copy(alpha = 0.05f), RoundedCornerShape(12.dp))
+                                        .padding(12.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(
+                                            imageVector = if (isMissed) {
+                                                Icons.AutoMirrored.Filled.CallMissed
+                                            } else if (isOutgoing) {
+                                                Icons.AutoMirrored.Filled.CallMade
+                                            } else {
+                                                Icons.AutoMirrored.Filled.CallReceived
+                                            },
+                                            contentDescription = record.callType,
+                                            tint = if (isMissed) SignalCoral else ElectricTeal,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(10.dp))
+                                        Column {
+                                            Text(
+                                                text = record.contactName.ifEmpty { "Unknown" },
+                                                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                                                color = Color.White
+                                            )
+                                            Text(
+                                                text = record.contactPhone,
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = TextSecondary
+                                            )
+                                        }
+                                    }
+
+                                    Column(horizontalAlignment = Alignment.End) {
+                                        Text(
+                                            text = formatDuration(record.durationSeconds),
+                                            style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
+                                            color = Color.White
+                                        )
+                                        Text(
+                                            text = formatTimestamp(record.timestamp),
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = TextSecondary,
+                                            fontSize = 10.sp
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 @Composable
 fun DashboardMainScreen(viewModel: CallLinkViewModel, currentUsername: String) {
-    var selectedTab by remember { mutableStateOf("dialer") } // "dialer", "history", "contacts", "settings"
+    var selectedTab by remember { mutableStateOf("dashboard") } // "dashboard", "dialer", "history", "contacts", "settings"
 
     Scaffold(
         bottomBar = {
@@ -436,6 +869,20 @@ fun DashboardMainScreen(viewModel: CallLinkViewModel, currentUsername: String) {
                 containerColor = SlateCard,
                 modifier = Modifier.border(0.5.dp, GlassWhite, RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp))
             ) {
+                NavigationBarItem(
+                    selected = selectedTab == "dashboard",
+                    onClick = { selectedTab = "dashboard" },
+                    label = { Text("Dashboard") },
+                    icon = { Icon(Icons.Default.Dashboard, contentDescription = "Dashboard") },
+                    colors = NavigationBarItemDefaults.colors(
+                        selectedIconColor = CyberCyan,
+                        selectedTextColor = CyberCyan,
+                        unselectedIconColor = TextSecondary,
+                        unselectedTextColor = TextSecondary,
+                        indicatorColor = CyberCyan.copy(alpha = 0.1f)
+                    ),
+                    modifier = Modifier.testTag("tab_dashboard")
+                )
                 NavigationBarItem(
                     selected = selectedTab == "dialer",
                     onClick = { selectedTab = "dialer" },
@@ -502,6 +949,7 @@ fun DashboardMainScreen(viewModel: CallLinkViewModel, currentUsername: String) {
                 .padding(innerPadding)
         ) {
             when (selectedTab) {
+                "dashboard" -> MainDashboardUnifiedScreen(viewModel = viewModel, onNavigateToDialer = { selectedTab = "dialer" })
                 "dialer" -> DialerScreen(viewModel = viewModel, username = currentUsername)
                 "history" -> CallHistoryScreen(viewModel = viewModel)
                 "contacts" -> ContactsScreen(viewModel = viewModel)
@@ -2369,6 +2817,87 @@ fun ConnectedActiveCallView(
     }
 }
 
+// Helper Hoverable Icon Button
+@Composable
+fun HoverableControlIconButton(
+    onClick: () -> Unit,
+    active: Boolean,
+    activeColor: Color,
+    inactiveColor: Color,
+    icon: ImageVector,
+    contentDescription: String,
+    modifier: Modifier = Modifier,
+    iconTint: Color = Color.White
+) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val isHovered by interactionSource.collectIsHoveredAsState()
+    val scale by animateFloatAsState(if (isHovered) 1.15f else 1f, label = "scale")
+    val glowColor = if (active) activeColor else CyberCyan
+
+    IconButton(
+        onClick = onClick,
+        interactionSource = interactionSource,
+        modifier = modifier
+            .scale(scale)
+            .shadow(
+                elevation = if (isHovered) 8.dp else 0.dp,
+                shape = CircleShape,
+                ambientColor = glowColor,
+                spotColor = glowColor
+            )
+            .border(
+                width = if (isHovered) 2.dp else 0.dp,
+                color = if (isHovered) CyberCyan else Color.Transparent,
+                shape = CircleShape
+            )
+            .background(if (active) activeColor else inactiveColor, CircleShape)
+            .size(48.dp)
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = contentDescription,
+            tint = iconTint
+        )
+    }
+}
+
+@Composable
+fun HoverableEndCallButton(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val isHovered by interactionSource.collectIsHoveredAsState()
+    val scale by animateFloatAsState(if (isHovered) 1.15f else 1f, label = "scale")
+
+    FloatingActionButton(
+        onClick = onClick,
+        interactionSource = interactionSource,
+        containerColor = if (isHovered) SignalCoral.copy(alpha = 0.85f) else SignalCoral,
+        contentColor = Color.White,
+        shape = CircleShape,
+        modifier = modifier
+            .scale(scale)
+            .shadow(
+                elevation = if (isHovered) 12.dp else 4.dp,
+                shape = CircleShape,
+                ambientColor = SignalCoral,
+                spotColor = SignalCoral
+            )
+            .border(
+                width = if (isHovered) 2.dp else 0.dp,
+                color = if (isHovered) Color.White else Color.Transparent,
+                shape = CircleShape
+            )
+            .size(52.dp)
+    ) {
+        Icon(
+            imageVector = Icons.Default.CallEnd,
+            contentDescription = "End Call"
+        )
+    }
+}
+
 // 9. RESPONSIVE CALL CONTROL TOOLBAR
 @Composable
 fun CallControlToolbar(
@@ -2386,106 +2915,75 @@ fun CallControlToolbar(
         verticalAlignment = Alignment.CenterVertically
     ) {
         // Mute Microphone
-        IconButton(
+        HoverableControlIconButton(
             onClick = { viewModel.toggleMute() },
-            modifier = Modifier
-                .background(if (session.isMuted) SignalCoral else GlassWhite.copy(alpha = 0.15f), CircleShape)
-                .size(48.dp)
-        ) {
-            Icon(
-                imageVector = if (session.isMuted) Icons.Default.MicOff else Icons.Default.Mic,
-                contentDescription = "Mute",
-                tint = Color.White
-            )
-        }
+            active = session.isMuted,
+            activeColor = SignalCoral,
+            inactiveColor = GlassWhite.copy(alpha = 0.15f),
+            icon = if (session.isMuted) Icons.Default.MicOff else Icons.Default.Mic,
+            contentDescription = "Mute"
+        )
 
         // Toggle Video / Camera (Only for Video calls)
         if (!session.isVoiceOnly) {
-            IconButton(
+            HoverableControlIconButton(
                 onClick = { viewModel.toggleCamera() },
-                modifier = Modifier
-                    .background(if (!session.isCameraEnabled) SignalCoral else GlassWhite.copy(alpha = 0.15f), CircleShape)
-                    .size(48.dp)
-            ) {
-                Icon(
-                    imageVector = if (session.isCameraEnabled) Icons.Default.Videocam else Icons.Default.VideocamOff,
-                    contentDescription = "Camera",
-                    tint = Color.White
-                )
-            }
+                active = !session.isCameraEnabled,
+                activeColor = SignalCoral,
+                inactiveColor = GlassWhite.copy(alpha = 0.15f),
+                icon = if (session.isCameraEnabled) Icons.Default.Videocam else Icons.Default.VideocamOff,
+                contentDescription = "Camera"
+            )
 
             if (session.isCameraEnabled) {
-                IconButton(
+                HoverableControlIconButton(
                     onClick = { viewModel.switchCamera() },
-                    modifier = Modifier
-                        .background(GlassWhite.copy(alpha = 0.15f), CircleShape)
-                        .size(48.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.FlipCameraAndroid,
-                        contentDescription = "Switch Camera",
-                        tint = Color.White
-                    )
-                }
+                    active = false,
+                    activeColor = GlassWhite.copy(alpha = 0.15f),
+                    inactiveColor = GlassWhite.copy(alpha = 0.15f),
+                    icon = Icons.Default.FlipCameraAndroid,
+                    contentDescription = "Switch Camera"
+                )
             }
         }
 
         // Speakerphone Toggle
-        IconButton(
+        HoverableControlIconButton(
             onClick = { viewModel.toggleSpeaker() },
-            modifier = Modifier
-                .background(if (session.isSpeakerOn) ElectricTeal else GlassWhite.copy(alpha = 0.15f), CircleShape)
-                .size(48.dp)
-        ) {
-            Icon(
-                imageVector = if (session.isSpeakerOn) Icons.Default.VolumeUp else Icons.Default.VolumeMute,
-                contentDescription = "Speaker",
-                tint = Color.White
-            )
-        }
+            active = session.isSpeakerOn,
+            activeColor = ElectricTeal,
+            inactiveColor = GlassWhite.copy(alpha = 0.15f),
+            icon = if (session.isSpeakerOn) Icons.Default.VolumeUp else Icons.Default.VolumeMute,
+            contentDescription = "Speaker"
+        )
 
         // Simulate Reconnection / Network Drop
-        IconButton(
+        HoverableControlIconButton(
             onClick = { viewModel.triggerReconnect() },
-            modifier = Modifier
-                .background(GlassWhite.copy(alpha = 0.15f), CircleShape)
-                .size(48.dp)
-        ) {
-            Icon(
-                imageVector = Icons.Default.NetworkCheck,
-                contentDescription = "Test Reconnection",
-                tint = CyberCyan
-            )
-        }
+            active = false,
+            activeColor = GlassWhite.copy(alpha = 0.15f),
+            inactiveColor = GlassWhite.copy(alpha = 0.15f),
+            icon = Icons.Default.NetworkCheck,
+            contentDescription = "Test Reconnection",
+            iconTint = CyberCyan
+        )
 
         // Record Call Toggle
-        IconButton(
+        HoverableControlIconButton(
             onClick = { viewModel.toggleRecording() },
-            modifier = Modifier
-                .background(if (session.isRecording) SignalCoral.copy(alpha = 0.8f) else GlassWhite.copy(alpha = 0.15f), CircleShape)
-                .size(48.dp)
-                .testTag("record_call_toggle")
-        ) {
-            Icon(
-                imageVector = if (session.isRecording) Icons.Default.Stop else Icons.Default.Circle,
-                contentDescription = "Record Call",
-                tint = if (session.isRecording) Color.White else SignalCoral
-            )
-        }
+            active = session.isRecording,
+            activeColor = SignalCoral.copy(alpha = 0.8f),
+            inactiveColor = GlassWhite.copy(alpha = 0.15f),
+            icon = if (session.isRecording) Icons.Default.Stop else Icons.Default.Circle,
+            contentDescription = "Record Call",
+            iconTint = if (session.isRecording) Color.White else SignalCoral,
+            modifier = Modifier.testTag("record_call_toggle")
+        )
 
         // End call
-        FloatingActionButton(
-            onClick = { viewModel.endCall() },
-            containerColor = SignalCoral,
-            contentColor = Color.White,
-            shape = CircleShape,
-            modifier = Modifier.size(52.dp)
-        ) {
-            Icon(
-                imageVector = Icons.Default.CallEnd,
-                contentDescription = "End Call"
-            )
-        }
+        HoverableEndCallButton(
+            onClick = { viewModel.endCall() }
+        )
     }
 }
 

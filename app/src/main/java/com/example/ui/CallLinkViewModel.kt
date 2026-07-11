@@ -50,6 +50,34 @@ class CallLinkViewModel(application: Application) : AndroidViewModel(application
     private val _activeFirestoreSession = MutableStateFlow<FirestoreCallSession?>(null)
     val activeFirestoreSession: StateFlow<FirestoreCallSession?> = _activeFirestoreSession.asStateFlow()
 
+    private val _activeSessions = MutableStateFlow<List<FirestoreCallSession>>(emptyList())
+    val activeSessions: StateFlow<List<FirestoreCallSession>> = _activeSessions.asStateFlow()
+    private var allActiveSessionsListener: com.google.firebase.firestore.ListenerRegistration? = null
+
+    fun startListeningToAllActiveSessions() {
+        val db = firebaseSyncManager.firestore
+        if (db != null && firebaseSyncManager.isFirebaseAvailable.value) {
+            allActiveSessionsListener?.remove()
+            allActiveSessionsListener = db.collection("call_sessions")
+                .whereIn("status", listOf("ringing", "connecting", "connected"))
+                .addSnapshotListener { snapshot, e ->
+                    if (e != null || snapshot == null) {
+                        Log.e("CallLinkViewModel", "Error listening to all active sessions: ${e?.message}")
+                        return@addSnapshotListener
+                    }
+                    val sessions = snapshot.toObjects(FirestoreCallSession::class.java)
+                    _activeSessions.value = sessions
+                }
+        } else {
+            _activeSessions.value = firebaseSyncManager.fetchLocalActiveCallSessionsMock()
+        }
+    }
+
+    fun stopListeningToAllActiveSessions() {
+        allActiveSessionsListener?.remove()
+        allActiveSessionsListener = null
+    }
+
     private var currentUserPhone: String = ""
 
     init {
@@ -142,9 +170,11 @@ class CallLinkViewModel(application: Application) : AndroidViewModel(application
                             }
                         }
                     }
+                    startListeningToAllActiveSessions()
                     syncCallHistoryFromCloud()
                 } else {
                     firebaseSyncManager.stopIncomingCallListener()
+                    stopListeningToAllActiveSessions()
                 }
             }
         }
@@ -154,9 +184,22 @@ class CallLinkViewModel(application: Application) : AndroidViewModel(application
         super.onCleared()
         firebaseSyncManager.stopRealtimeStatusListener()
         firebaseSyncManager.stopIncomingCallListener()
+        stopListeningToAllActiveSessions()
     }
 
     // Authentication Services
+    fun signInWithGoogle(idToken: String, onResult: (Boolean, String?) -> Unit) {
+        firebaseSyncManager.signInWithGoogleToken(idToken) { success, error ->
+            if (success) {
+                val generatedPhone = firebaseSyncManager.currentUserState.value?.phoneNumber ?: ""
+                currentUserPhone = generatedPhone
+                val name = firebaseSyncManager.currentUserState.value?.name ?: "Google User"
+                syncProfileState(name)
+            }
+            onResult(success, error)
+        }
+    }
+
     fun signUp(email: String, password: String, name: String, onResult: (Boolean, String?) -> Unit) {
         firebaseSyncManager.signUpWithEmail(email, password, name) { success, error ->
             if (success) {

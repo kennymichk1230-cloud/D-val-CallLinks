@@ -269,6 +269,77 @@ class FirebaseSyncManager(private val context: Context) {
         }
     }
 
+    // Google Sign-In helper function
+    fun signInWithGoogleToken(idToken: String, onResult: (Boolean, String?) -> Unit) {
+        val mAuth = auth
+        val mFirestore = firestore
+
+        if (mAuth != null && mFirestore != null && _isFirebaseAvailable.value) {
+            scope.launch {
+                try {
+                    val credential = com.google.firebase.auth.GoogleAuthProvider.getCredential(idToken, null)
+                    val authResult = mAuth.signInWithCredential(credential).await()
+                    val user = authResult.user
+                    if (user != null) {
+                        val phoneDoc = mFirestore.collection("users_by_uid").document(user.uid).get().await()
+                        var phone = phoneDoc.getString("phone")
+                        val name = phoneDoc.getString("name") ?: (user.displayName ?: "Google User")
+                        
+                        if (phone == null) {
+                            phone = generateUserPhoneNumber()
+                            val profileData = mapOf(
+                                "uid" to user.uid,
+                                "email" to (user.email ?: ""),
+                                "name" to name,
+                                "phone" to phone,
+                                "status" to "Online",
+                                "lastSeen" to System.currentTimeMillis()
+                            )
+                            val uidMapping = mapOf(
+                                "phone" to phone,
+                                "name" to name,
+                                "email" to (user.email ?: "")
+                            )
+                            mFirestore.collection("users").document(phone).set(profileData).await()
+                            mFirestore.collection("users_by_uid").document(user.uid).set(uidMapping).await()
+                        }
+
+                        val session = FirebaseUserSession(
+                            uid = user.uid,
+                            email = user.email ?: "",
+                            name = name,
+                            phoneNumber = phone,
+                            status = "Online"
+                        )
+                        _currentUserState.value = session
+                        updateOnlineStatus(phone, "Online")
+                        _syncStatus.value = "Google Logged In: $phone"
+                        onResult(true, null)
+                    } else {
+                        onResult(false, "Google user credentials empty")
+                    }
+                } catch (e: Exception) {
+                    Log.e("FirebaseSync", "Google sign-in error: ${e.message}")
+                    onResult(false, e.localizedMessage ?: "Unknown Firebase Google error")
+                }
+            }
+        } else {
+            // Local fallback simulation for Google Sign-In
+            val generatedPhone = generateUserPhoneNumber()
+            val session = FirebaseUserSession(
+                uid = "google-" + UUID.randomUUID().toString().take(8),
+                email = "google.user@example.com",
+                name = "Google User Fallback",
+                phoneNumber = generatedPhone,
+                status = "Online"
+            )
+            fallbackLocalDirectory[generatedPhone] = session
+            _currentUserState.value = session
+            _syncStatus.value = "Google Local Fallback Session: $generatedPhone"
+            onResult(true, null)
+        }
+    }
+
     // Sign Out
     fun signOut() {
         val phone = _currentUserState.value?.phoneNumber
@@ -600,6 +671,32 @@ class FirebaseSyncManager(private val context: Context) {
             // Simulated local memory fallback
             onResult(true, null)
         }
+    }
+
+    // Fetch all active call sessions from Firestore
+    fun fetchActiveCallSessionsCloud(onResult: (List<FirestoreCallSession>) -> Unit) {
+        val db = firestore
+        if (db != null && _isFirebaseAvailable.value) {
+            scope.launch {
+                try {
+                    val querySnapshot = db.collection("call_sessions")
+                        .whereIn("status", listOf("ringing", "connecting", "connected"))
+                        .get()
+                        .await()
+                    val sessions = querySnapshot.toObjects(FirestoreCallSession::class.java)
+                    onResult(sessions)
+                } catch (e: Exception) {
+                    Log.e("FirebaseSync", "Error fetching active sessions: ${e.message}")
+                    onResult(emptyList())
+                }
+            }
+        } else {
+            onResult(fallbackActiveSessions.values.toList())
+        }
+    }
+
+    fun fetchLocalActiveCallSessionsMock(): List<FirestoreCallSession> {
+        return fallbackActiveSessions.values.toList()
     }
 
     // Real-time Incoming Call Listener
